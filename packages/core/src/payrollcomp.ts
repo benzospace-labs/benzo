@@ -15,7 +15,7 @@
 
 import { hash } from "./crypto/poseidon2.js";
 import { noteCommitment } from "./notes.js";
-import { toWitnessInput, type CircuitArtifacts, type ProveResult, type ProverPort } from "./prover.js";
+import { type CircuitArtifacts, type ProveResult, type ProverPort, toWitnessInput } from "./prover.js";
 
 export const PAYROLL_LINES = 4; // circuit-fixed
 export const PAYROLL_DIGEST_DOMAIN = 0x0bn;
@@ -53,7 +53,11 @@ export interface ProvePayrollComputationParams {
 /**
  * Build the witness and prove the run was correctly computed from the rate card.
  * Returns the computed `runTotal` and `commitDigest` (both public) alongside the
- * proof. Throws (no proof) if any line's gross is negative or out of 64-bit range.
+ * proof. Throws (no proof) for more than `PAYROLL_LINES` lines, any line's gross
+ * below zero or above the unsigned 64-bit range, or a run total above that range.
+ * The circuit's `AmountCheck()` enforces the same 64-bit range for each gross at
+ * prove time; the SDK checks up front for clean errors instead of snarkjs failures.
+ * The SDK also limits the run total, which the circuit does not range-check.
  */
 export async function provePayrollComputation(
   params: ProvePayrollComputationParams,
@@ -61,13 +65,24 @@ export async function provePayrollComputation(
   if (params.lines.length > PAYROLL_LINES) {
     throw new Error(`payroll computation supports at most ${PAYROLL_LINES} lines`);
   }
+  const maxAmount = (1n << 64n) - 1n;
+  let runTotal = 0n;
+  for (let i = 0; i < params.lines.length; i++) {
+    const gross = payrollGross(params.lines[i]);
+    if (gross < 0n || gross > maxAmount) {
+      throw new Error(`payroll line ${i} gross is outside the unsigned 64-bit range: ${gross}`);
+    }
+    runTotal += gross;
+    if (runTotal < 0n || runTotal > maxAmount) {
+      throw new Error(`payroll run total is outside the unsigned 64-bit range: ${runTotal}`);
+    }
+  }
   const rate: bigint[] = [];
   const period: bigint[] = [];
   const deductions: bigint[] = [];
   const recipientPk: bigint[] = [];
   const blinding: bigint[] = [];
   const commitments: bigint[] = [];
-  let runTotal = 0n;
   for (let i = 0; i < PAYROLL_LINES; i++) {
     const l = params.lines[i];
     if (l) {
@@ -78,7 +93,6 @@ export async function provePayrollComputation(
       recipientPk.push(l.recipientPk);
       blinding.push(l.blinding);
       commitments.push(noteCommitment({ amount: gross, recipientPk: l.recipientPk, blinding: l.blinding, assetId: params.assetId }));
-      runTotal += gross;
     } else {
       // zero line: gross 0, recipientPk 0, blinding 0
       rate.push(0n);
