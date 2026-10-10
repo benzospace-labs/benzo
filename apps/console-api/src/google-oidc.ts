@@ -13,14 +13,30 @@ import { createPublicKey, verify as cryptoVerify, type JsonWebKey as NodeJWK } f
 const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 const GOOGLE_ISS = ["https://accounts.google.com", "accounts.google.com"];
 
+export const JWKS_CACHE_TTL_MS = 3_600_000;
+export const JWKS_MISS_COOLDOWN_MS = 30_000;
+
 let jwksCache: { at: number; keys: NodeJWK[] } | null = null;
-async function googleJwks(): Promise<NodeJWK[]> {
-  if (jwksCache && Date.now() - jwksCache.at < 3_600_000) return jwksCache.keys;
-  const r = await fetch(GOOGLE_JWKS_URL);
-  if (!r.ok) throw new Error(`google JWKS fetch failed: ${r.status}`);
-  const body = (await r.json()) as { keys: NodeJWK[] };
-  jwksCache = { at: Date.now(), keys: body.keys };
-  return body.keys;
+let lastMissRefetchAt = 0;
+let inflightFetch: Promise<NodeJWK[]> | null = null;
+
+export async function googleJwks(force = false): Promise<NodeJWK[]> {
+  if (!force && jwksCache && Date.now() - jwksCache.at < JWKS_CACHE_TTL_MS) {
+    return jwksCache.keys;
+  }
+  if (inflightFetch) return inflightFetch;
+  inflightFetch = (async () => {
+    try {
+      const r = await fetch(GOOGLE_JWKS_URL);
+      if (!r.ok) throw new Error(`google JWKS fetch failed: ${r.status}`);
+      const body = (await r.json()) as { keys: NodeJWK[] };
+      jwksCache = { at: Date.now(), keys: body.keys };
+      return body.keys;
+    } finally {
+      inflightFetch = null;
+    }
+  })();
+  return inflightFetch;
 }
 
 const b64urlJson = (seg: string): Record<string, unknown> =>
@@ -48,8 +64,16 @@ export async function verifyGoogleIdToken(idToken: string, clientId: string): Pr
   const payload = b64urlJson(parts[1]) as unknown as GoogleClaims;
   if (header.alg !== "RS256") throw new Error(`unexpected alg ${header.alg}`);
 
-  const keys = await googleJwks();
-  const jwk = keys.find((k) => (k as { kid?: string }).kid === header.kid);
+  let keys = await googleJwks();
+  let jwk = header.kid ? keys.find((k) => (k as { kid?: string }).kid === header.kid) : undefined;
+  if (!jwk && header.kid) {
+    const now = Date.now();
+    if (now - lastMissRefetchAt >= JWKS_MISS_COOLDOWN_MS) {
+      lastMissRefetchAt = now;
+      keys = await googleJwks(true);
+      jwk = header.kid ? keys.find((k) => (k as { kid?: string }).kid === header.kid) : undefined;
+    }
+  }
   if (!jwk) throw new Error("no matching Google JWK for kid");
   const pub = createPublicKey({ key: jwk, format: "jwk" });
   const signingInput = Buffer.from(`${parts[0]}.${parts[1]}`);
@@ -68,4 +92,10 @@ export async function verifyGoogleIdToken(idToken: string, clientId: string): Pr
 /** Is real Google login configured on this BFF? */
 export function googleConfigured(): boolean {
   return !!process.env.GOOGLE_CLIENT_ID;
+}
+
+export function _resetJwksCacheForTest(): void {
+  jwksCache = null;
+  lastMissRefetchAt = 0;
+  inflightFetch = null;
 }
