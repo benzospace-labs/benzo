@@ -502,10 +502,7 @@ route("POST", "/api/auth/google", async (req, res) => {
   if (!clientId) return json(res, 200, { verified: false, configured: false, note: "GOOGLE_CLIENT_ID not set" });
   try {
     const body = await readJson<{ credential: string; nonce?: string }>(req);
-    const claims = await verifyGoogleIdToken(String(body.credential), clientId);
-    if (body.nonce && claims.nonce && body.nonce !== claims.nonce) {
-      return json(res, 400, { verified: false, error: "nonce mismatch (zkLogin binding)" });
-    }
+    const claims = await verifyGoogleIdToken(String(body.credential), clientId, body.nonce);
     json(res, 200, { verified: true, sub: claims.sub, iss: claims.iss, aud: claims.aud, email: claims.email, name: claims.name });
   } catch (e) {
     json(res, 401, { verified: false, error: (e as Error).message });
