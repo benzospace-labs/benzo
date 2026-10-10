@@ -246,3 +246,10 @@ server.listen(PORT, () => {
     );
   }
 });
+
+for (const sig of ["SIGINT", "SIGTERM"] as const) {
+  process.on(sig, () => {
+    abuse.close?.();
+  });
+}
+
