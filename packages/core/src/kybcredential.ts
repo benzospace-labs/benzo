@@ -17,7 +17,7 @@
 
 import { buildEddsa, buildPoseidon } from "circomlibjs";
 import { MerkleTreeMirror } from "./merkle.js";
-import { toWitnessInput, type CircuitArtifacts, type ProveResult, type ProverPort } from "./prover.js";
+import { type CircuitArtifacts, type ProveResult, type ProverPort, toWitnessInput } from "./prover.js";
 
 export const KYB_ISSUER_LEVELS = 16; // circuit-fixed
 
@@ -50,6 +50,9 @@ export interface ProveKybCredentialParams {
 export async function proveKybCredential(
   params: ProveKybCredentialParams,
 ): Promise<ProveResult & { jurisdiction: bigint; tier: bigint; orgNullifier: bigint; addressBinding: bigint; issuerRegistryRoot: bigint }> {
+  if (params.currentTime >= params.expiry) {
+    throw new Error(`credential expired at ${params.expiry} (current: ${params.currentTime})`);
+  }
   const { eddsa, poseidon, babyjub, F } = await tools();
 
   // Issuer BabyJubJub key + its registry key-id.
