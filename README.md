@@ -366,7 +366,19 @@ pnpm audit:prod-env
 pnpm audit:prod-db
 pnpm audit:privacy
 pnpm audit:actions
+pnpm prune:request-limits
 ```
+
+### Request Limit Retention
+
+The `benzo_request_limits` table tracks rate limit windows. Rows older than the retention
+horizon (default: 7 days, configurable via `BENZO_REQUEST_LIMIT_RETENTION_SECONDS`) are pruned
+opportunistically during schema bootstrap or on demand with:
+
+```bash
+pnpm prune:request-limits
+```
+
 
 ## Deploy
 

@@ -16,6 +16,7 @@
     "audit:prod-db": "node scripts/audit-production-db.mjs",
     "audit:privacy": "node scripts/audit-privacy-payloads.mjs",
     "audit:actions": "node scripts/audit-action-coverage.mjs",
+    "prune:request-limits": "node scripts/prune-request-limits.mjs",
     "smoke:wallet-account-freedom": "node scripts/smoke-wallet-account-freedom.mjs",
     "test": "pnpm -r test",
     "test:zk": "node scripts/check-artifacts.mjs && pnpm -r test",

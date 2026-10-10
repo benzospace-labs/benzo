@@ -115,6 +115,10 @@ async function ensureTenantSchema(db) {
       primary key (app, tenant_key, bucket)
     )
   `;
+  await db`
+    create index if not exists benzo_request_limits_window_start_idx
+    on benzo_request_limits (window_start)
+  `;
 }
 
 async function ensureRelayerSchema(db) {

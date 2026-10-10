@@ -230,6 +230,50 @@ test("hosted console request limits are tenant-scoped outside the product docume
   });
 });
 
+test("hosted console retention sweep deletes expired request limits and preserves active window", async () => {
+  process.env.BENZO_HOSTED_TENANT_TEST = "1";
+  process.env.BENZO_TENANT_STORE_MEMORY = "1";
+  process.env.BENZO_DATA_ENCRYPTION_SECRET = "tenant-store-test-secret";
+  process.env.BENZO_DISABLE_TENANT_LEGACY_DECRYPT = "1";
+  const { pruneExpiredRequestLimits, takeTenantRateLimit, REQUEST_LIMIT_RETENTION_SECONDS } = await import("./tenantData.js");
+
+  expect(REQUEST_LIMIT_RETENTION_SECONDS).toBe(7 * 24 * 60 * 60);
+
+  const baseNow = 2_000_000;
+  const horizon = 7 * 24 * 60 * 60; // 7 days = 604,800s
+  const expiredTime = baseNow - (10 * 24 * 60 * 60); // 10 days ago (expired)
+  const recentTime = baseNow - (2 * 24 * 60 * 60); // 2 days ago (within horizon)
+  const activeTime = baseNow; // current active window
+
+  // Max out rate limits for three different tenants at distinct times
+  await expect(takeTenantRateLimit("console", "console:expired", "write", 1, 1, 60, expiredTime)).resolves.toEqual({ ok: true });
+  await expect(takeTenantRateLimit("console", "console:expired", "write", 1, 1, 60, expiredTime)).resolves.toMatchObject({ ok: false });
+
+  await expect(takeTenantRateLimit("console", "console:recent", "write", 1, 1, 60, recentTime)).resolves.toEqual({ ok: true });
+  await expect(takeTenantRateLimit("console", "console:recent", "write", 1, 1, 60, recentTime)).resolves.toMatchObject({ ok: false });
+
+  await expect(takeTenantRateLimit("console", "console:active", "write", 1, 1, 60, activeTime)).resolves.toEqual({ ok: true });
+  await expect(takeTenantRateLimit("console", "console:active", "write", 1, 1, 60, activeTime)).resolves.toMatchObject({ ok: false });
+
+  // Run retention sweep at baseNow
+  const pruned = await pruneExpiredRequestLimits({ horizonSeconds: horizon, nowSec: baseNow });
+  expect(pruned).toBe(1);
+
+  // Expired tenant's record should be pruned, allowing a new request in that old window
+  await expect(takeTenantRateLimit("console", "console:expired", "write", 1, 1, 60, expiredTime)).resolves.toEqual({ ok: true });
+
+  // Recent and active tenants must still be rate-limited
+  await expect(takeTenantRateLimit("console", "console:recent", "write", 1, 1, 60, recentTime)).resolves.toMatchObject({ ok: false });
+  await expect(takeTenantRateLimit("console", "console:active", "write", 1, 1, 60, activeTime)).resolves.toMatchObject({ ok: false });
+
+  // Running sweep with zero horizon clamps to safe horizon (60s), which protects the active window
+  // (at baseNow), while pruning any past windows older than 60s (both console:expired and console:recent).
+  const safePruned = await pruneExpiredRequestLimits({ horizonSeconds: 0, nowSec: baseNow });
+  expect(safePruned).toBe(2);
+  // Crucially, the active window row is NOT deleted and remains rate-limited:
+  await expect(takeTenantRateLimit("console", "console:active", "write", 1, 1, 60, activeTime)).resolves.toMatchObject({ ok: false });
+});
+
 test("hosted console fails closed when a tenant account binding changes", async () => {
   process.env.BENZO_HOSTED_TENANT_TEST = "1";
   process.env.BENZO_TENANT_STORE_MEMORY = "1";

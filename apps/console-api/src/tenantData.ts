@@ -36,6 +36,32 @@ function sql(): NeonQueryFunction<false, false> | null {
   return sqlClient;
 }
 
+// Retention horizon for request rate limits (default: 7 days).
+// Rows with window_start older than the horizon are pruned opportunistically
+// on schema bootstrap and via pruneExpiredRequestLimits().
+export const REQUEST_LIMIT_RETENTION_SECONDS = 7 * 24 * 60 * 60; // 7 days
+
+export function getRequestLimitRetentionSeconds(): number {
+  const envVal = process.env.BENZO_REQUEST_LIMIT_RETENTION_SECONDS;
+  if (envVal) {
+    const parsed = Number(envVal);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return REQUEST_LIMIT_RETENTION_SECONDS;
+}
+
+async function pruneExpiredRequestLimitsOnDb(
+  db: NeonQueryFunction<false, false>,
+  cutoffSec: number = Math.floor(Date.now() / 1000) - Math.max(getRequestLimitRetentionSeconds(), 60),
+): Promise<number> {
+  const rows = await db`
+    delete from benzo_request_limits
+    where window_start < ${cutoffSec}
+    returning 1
+  `;
+  return rows.length;
+}
+
 async function ensureSchema(): Promise<void> {
   const db = sql();
   if (!db) return;
@@ -72,6 +98,11 @@ async function ensureSchema(): Promise<void> {
         primary key (app, tenant_key, bucket)
       )
     `;
+    await db`
+      create index if not exists benzo_request_limits_window_start_idx
+      on benzo_request_limits (window_start)
+    `;
+    await pruneExpiredRequestLimitsOnDb(db).catch(() => 0);
   })();
   await schemaReady;
 }
@@ -231,12 +262,61 @@ export async function lookupTenantRoute(app: string, routeType: string, token: s
   return row.tenant_key;
 }
 
+export async function pruneExpiredRequestLimits(
+  horizonOrOptions?: number | { horizonSeconds?: number; nowSec?: number },
+  explicitNowSec?: number,
+): Promise<number> {
+  const horizonSeconds =
+    typeof horizonOrOptions === "number"
+      ? horizonOrOptions
+      : (horizonOrOptions?.horizonSeconds ?? getRequestLimitRetentionSeconds());
+  const nowSec =
+    typeof horizonOrOptions === "object" && horizonOrOptions?.nowSec !== undefined
+      ? horizonOrOptions.nowSec
+      : (explicitNowSec ?? Math.floor(Date.now() / 1000));
+
+  // The sweep must never delete rows for an active window.
+  // Standard windows are up to 60 seconds, so safe horizon ensures cutoff is strictly before active windows.
+  const safeHorizon = Math.max(horizonSeconds, 60);
+  const cutoff = nowSec - safeHorizon;
+
+  if (useMemoryStore()) {
+    let pruned = 0;
+    for (const [key, bucket] of memoryRateLimits.entries()) {
+      if (bucket.windowStart < cutoff) {
+        memoryRateLimits.delete(key);
+        pruned++;
+      }
+    }
+    return pruned;
+  }
+  await ensureSchema();
+  const db = sql();
+  if (!db) {
+    let pruned = 0;
+    for (const [key, bucket] of memoryRateLimits.entries()) {
+      if (bucket.windowStart < cutoff) {
+        memoryRateLimits.delete(key);
+        pruned++;
+      }
+    }
+    return pruned;
+  }
+  return pruneExpiredRequestLimitsOnDb(db, cutoff);
+}
+
 function currentWindow(nowSec: number, windowSeconds: number): number {
   return Math.floor(nowSec / windowSeconds) * windowSeconds;
 }
 
-function takeMemoryRateLimit(key: string, weight: number, limit: number, windowSeconds: number): { ok: true } | { ok: false; retryAfter: number } {
-  const now = Math.floor(Date.now() / 1000);
+function takeMemoryRateLimit(
+  key: string,
+  weight: number,
+  limit: number,
+  windowSeconds: number,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): { ok: true } | { ok: false; retryAfter: number } {
+  const now = nowSec;
   const windowStart = currentWindow(now, windowSeconds);
   const bucket = memoryRateLimits.get(key) ?? { windowStart, count: 0 };
   if (bucket.windowStart !== windowStart) {
@@ -256,13 +336,14 @@ export async function takeTenantRateLimit(
   weight: number,
   limit: number,
   windowSeconds: number,
+  nowSec?: number,
 ): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
   const key = `${app}:${tenantKey}:${bucketName}`;
-  if (useMemoryStore()) return takeMemoryRateLimit(key, weight, limit, windowSeconds);
+  const now = nowSec ?? Math.floor(Date.now() / 1000);
+  if (useMemoryStore()) return takeMemoryRateLimit(key, weight, limit, windowSeconds, now);
   await ensureSchema();
   const db = sql();
-  if (!db) return takeMemoryRateLimit(key, weight, limit, windowSeconds);
-  const now = Math.floor(Date.now() / 1000);
+  if (!db) return takeMemoryRateLimit(key, weight, limit, windowSeconds, now);
   const windowStart = currentWindow(now, windowSeconds);
   const rows = await db`
     insert into benzo_request_limits (app, tenant_key, bucket, window_start, count, updated_at)
