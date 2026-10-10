@@ -41,7 +41,11 @@ export interface GoogleClaims {
  * Verify a Google ID token (RS256) against Google's JWKs. Real signature + claim
  * verification (alg, kid, iss, aud, exp). Throws on any failure.
  */
-export async function verifyGoogleIdToken(idToken: string, clientId: string): Promise<GoogleClaims> {
+export async function verifyGoogleIdToken(
+  idToken: string,
+  clientId: string,
+  expectedNonce?: string,
+): Promise<GoogleClaims> {
   const parts = idToken.split(".");
   if (parts.length !== 3) throw new Error("malformed id token");
   const header = b64urlJson(parts[0]) as { alg?: string; kid?: string };
@@ -62,6 +66,10 @@ export async function verifyGoogleIdToken(idToken: string, clientId: string): Pr
   if (clientId && payload.aud !== clientId) throw new Error("aud does not match GOOGLE_CLIENT_ID");
   if (!payload.exp || payload.exp * 1000 < Date.now()) throw new Error("id token expired");
   if (!payload.sub) throw new Error("id token has no sub");
+  if (expectedNonce !== undefined) {
+    if (!payload.nonce) throw new Error("id token is missing required nonce");
+    if (payload.nonce !== expectedNonce) throw new Error("id token nonce mismatch");
+  }
   return payload;
 }
 
