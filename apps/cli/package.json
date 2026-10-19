@@ -10,7 +10,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "node init && tsc -p tsconfig.json"
   },
   "dependencies": {
     "@benzo/core": "workspace:*",

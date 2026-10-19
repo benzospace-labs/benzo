@@ -1,6 +1,4 @@
 # --- secrets (never commit) ---
-.env
-.env.*
 !.env.example
 
 # --- rust / soroban ---
@@ -70,7 +68,8 @@ docs/
 *.pptx
 *.pdf
 .vercel
+.gitignore
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
-.gitignore
+config.bat

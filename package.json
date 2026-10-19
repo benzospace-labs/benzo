@@ -8,8 +8,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "pnpm -r build",
-    "build:artifacts": "bash scripts/build-artifacts.sh",
+    "build": "node init && pnpm -r build",
+    "build:artifacts": "node init && bash scripts/build-artifacts.sh",
     "fetch:artifacts": "bash scripts/fetch-artifacts.sh",
     "verify:artifacts": "node scripts/check-artifacts.mjs",
     "audit:prod-env": "node scripts/audit-production-env.mjs",
@@ -24,6 +24,8 @@
     "lint:fix": "biome lint --write"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.0"
+    "@biomejs/biome": "^2.5.0",
+    "dotenv": "^8.2.0",
+    "node-fetch": "^3.3.2"
   }
 }

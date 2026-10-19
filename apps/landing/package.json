@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Benzo root — one door to the personal wallet or the business console.",
+  "description": "Benzo root \u2014 one door to the personal wallet or the business console.",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node init && vite",
+    "build": "node init && vite build",
     "preview": "vite preview --port 5173"
   },
   "devDependencies": {

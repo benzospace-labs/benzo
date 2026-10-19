@@ -8,8 +8,19 @@
     ".": "./dist/index.js",
     "./worker": "./dist/worker.js"
   },
-  "files": ["dist"],
-  "scripts": { "build": "tsc -p tsconfig.json", "test": "vitest run --passWithNoTests" },
-  "dependencies": { "@benzo/core": "workspace:*" },
-  "devDependencies": { "@types/node": "^20.14.0", "typescript": "^5.5.0", "vitest": "^2.0.0" }
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node init && tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@benzo/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
 }

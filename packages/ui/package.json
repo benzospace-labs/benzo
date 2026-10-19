@@ -5,15 +5,38 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./send-sequence": { "types": "./dist/send-sequence.d.ts", "default": "./dist/send-sequence.js" },
-    "./payment-state": { "types": "./dist/payment-state.d.ts", "default": "./dist/payment-state.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./send-sequence": {
+      "types": "./dist/send-sequence.d.ts",
+      "default": "./dist/send-sequence.js"
+    },
+    "./payment-state": {
+      "types": "./dist/payment-state.d.ts",
+      "default": "./dist/payment-state.js"
+    }
   },
-  "files": ["dist"],
-  "scripts": { "build": "tsc -p tsconfig.json", "test": "vitest run --passWithNoTests" },
-  "peerDependencies": { "react": "^18.0.0" },
-  "peerDependenciesMeta": { "react": { "optional": true } },
-  "dependencies": { "@benzo/core": "workspace:*", "@benzo/wallet": "workspace:*" },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node init && tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@benzo/core": "workspace:*",
+    "@benzo/wallet": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",

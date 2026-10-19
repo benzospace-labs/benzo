@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "main": "./dist/server.js",
-  "description": "BFF for the Benzo consumer wallet — real on-chain shielded USDC via @benzo/core (testnet).",
+  "description": "BFF for the Benzo consumer wallet \u2014 real on-chain shielded USDC via @benzo/core (testnet).",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node init && tsc -p tsconfig.json",
     "serve": "node dist/server.js",
-    "dev": "tsc -p tsconfig.json && node dist/server.js",
+    "dev": "node init && tsc -p tsconfig.json && node dist/server.js",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {

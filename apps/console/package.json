@@ -5,8 +5,8 @@
   "type": "module",
   "description": "Benzo console UI primitives (design system) + showcase. No screens yet - built in the UI phase.",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node init && vite",
+    "build": "node init && vite build",
     "preview": "vite preview --port 5174",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
